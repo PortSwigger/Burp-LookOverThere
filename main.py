@@ -2,8 +2,6 @@ from burp import IBurpExtender
 from burp import IHttpListener
 from burp import ITab
 import re
-import unicodedata
-from os.path import exists
 from jarray import array
 from javax.swing import (GroupLayout, JPanel, JCheckBox, JTextField, JLabel, JButton)
 
@@ -23,19 +21,20 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
         self._helpers = callbacks.getHelpers()
 
         # define all the options for the config tab
+        self.enabled = self.defineCheckBox("BApp enabled", False)
+        self.enabled.setToolTipText("Defaults to disabled so that it doesn't interfere with web app's functionality by accident")
+
         self.onlyInScope = self.defineCheckBox("Only resources that are in the suite's scope", True)
         self.onlyInScope.setToolTipText("Check to only work within the defined scope")
 
-        self.debugLevel = JTextField(str(3), 1)
-#        self.debugLevel = JTextField(str(1), 1)
+        self.debugLevel = JTextField(str(1), 1)
         self.debugLevelLabel = JLabel("Debug level (0-3)")
         self.debugLevel.setToolTipText("Values 0-3, bigger number is more debug output, 0 is zero debug output")
         self.debugLevelGroup = JPanel()
         self.debugLevelGroup.add(self.debugLevelLabel)
         self.debugLevelGroup.add(self.debugLevel)
 
-        self.triggerRequestURI = JTextField('/account/dashboard')
- #       self.triggerRequestURI = JTextField('/example/API/trigger_endpoint')
+        self.triggerRequestURI = JTextField('/example/API/trigger_endpoint')
         self.triggerRequestURILabel = JLabel('Location of the trigger URI')
         self.triggerRequestURI.setToolTipText("This is the trigger location, this way not all requests are altered")
         self.triggerRequestURIGroup = JPanel()
@@ -45,18 +44,17 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
         self.onlyHTTP200Res = self.defineCheckBox("HTTP 200 responses only", True)
         self.onlyHTTP200Res.setToolTipText("By default this extension only redirects when the response is not an HTTP 200, uncheck to redirect everything")
 
-        self.permitMethodGET = self.defineCheckBox("Permit the GET HTTP Method", False)
+        self.permitMethodGET = self.defineCheckBox("Permit triggers with GET HTTP Method", False)
         self.permitMethodGET.setToolTipText("By default don't fiddle with GET requests")
-        self.permitMethodPOST = self.defineCheckBox("Permit the POST HTTP Method", True)
+        self.permitMethodPOST = self.defineCheckBox("Permit triggers with POST HTTP Method", True)
         self.permitMethodPOST.setToolTipText("By default do fiddle with POST requests")
-        self.permitMethodPUT = self.defineCheckBox("Permit the PUT HTTP Method", False)
+        self.permitMethodPUT = self.defineCheckBox("Permit triggers with PUT HTTP Method", False)
         self.permitMethodPUT.setToolTipText("By default don't fiddle with PUT requests")
-        self.permitMethodOPTIONS = self.defineCheckBox("Permit the OPTIONS HTTP Method", False)
+        self.permitMethodOPTIONS = self.defineCheckBox("Permit triggers with OPTIONS HTTP Method", False)
         self.permitMethodOPTIONS.setToolTipText("By default don't fiddle with OPTIONS requests")
 
-        self.targetRequestURI = JTextField('/account/dashboard/154')
-#        self.targetRequestURI = JTextField('/example/API/target_endpoint')
-        self.targetRequestURILabel = JLabel('Location of the trigger URI')
+        self.targetRequestURI = JTextField('/example/API/target_endpoint')
+        self.targetRequestURILabel = JLabel('Location of the target URI')
         self.targetRequestURI.setToolTipText("This is the target location, this is where the results of the previous injection attempt can be found")
         self.targetRequestURIGroup = JPanel()
         self.targetRequestURIGroup.add(self.targetRequestURILabel)
@@ -71,6 +69,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
         layout.setHorizontalGroup(
             layout.createSequentialGroup()
             .addGroup(layout.createParallelGroup()
+                .addComponent(self.enabled, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
                 .addComponent(self.onlyInScope, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
                 .addComponent(self.debugLevelGroup, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
                 .addComponent(self.triggerRequestURIGroup, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
@@ -84,6 +83,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
         )
         layout.setVerticalGroup(
             layout.createSequentialGroup()
+            .addComponent(self.enabled, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
             .addComponent(self.onlyInScope, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
             .addComponent(self.debugLevelGroup, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
             .addComponent(self.triggerRequestURIGroup, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
@@ -120,6 +120,10 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
 
 
     def processHttpMessage(self, toolFlag, messageIsRequest, message):
+        if not self.enabled.isSelected():
+            self.debug('Look Over There BApp is not enabled in config', 1)
+            return
+
         self.debug('\nProcessing message...', 3)
         # we only process the responses (and get the bits of the request we need when they are responded to)
         if messageIsRequest:
@@ -134,6 +138,13 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
         # check if the requested resource is within permitted scope
         if self.onlyInScope.isSelected() and not self._callbacks.isInScope(reqURL):
             self.debug('Not in-scope and only in-scope permitted', 2)
+            return
+
+        # only allow appropriate Burp tools to use this BApp
+        if toolFlag == self._callbacks.TOOL_PROXY or toolFlag == self._callbacks.TOOL_SPIDER or \
+            toolFlag == self._callbacks.TOOL_SEQUENCER or toolFlag == self._callbacks.TOOL_DECODER or \
+            toolFlag == self._callbacks.TOOL_COMPARER:
+            self.debug('HTTP message is not from a permitted Burp tool, abandoning', 2)
             return
 
         # prep the headers
@@ -182,7 +193,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
 
         # if the request is to a trigger resource URI then continue
         if re.search(str(self.triggerRequestURI.text), str(reqURL), re.IGNORECASE):
-            self.debug('Trigger resource found: ' + str(reqURL), 3)
+            self.debug('Trigger resource found: ' + str(reqURL), 1)
         else:
             self.debug('Trigger resource NOT found!  Looking for: ' + str(self.triggerRequestURI.text) + ' but it was: ' + str(reqURL), 3)
             return
@@ -200,11 +211,11 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
         self.debug('Current HTTP version is: ' + currentHTTPver, 3)
 
         # regex replace the status code
-        httpHeaderStrWithNewStatus = re.sub(r"HTTP\/(?:1.0|1.1|2|3)\s(?:[0-9][0-9][0-9]).+", currentHTTPver + '302 Found', resHeaderStr)
+        httpHeaderStrWithNewStatus = re.sub(r"HTTP\/(?:1.0|1.1|2|3)\s(?:[0-9][0-9][0-9]).+", currentHTTPver + '302 Found\r\n', resHeaderStr)
         self.debug('Set the HTTP status code to a 302 redirect', 3)
 
-        # build the additional header string
-        extraHeaderStr = 'Location: ' + str(self.targetRequestURI.text) + '\n'
+        # build the additional header string - thi doesn't need the \n as this is added elsewhere, just the \r needed
+        extraHeaderStr = 'Location: ' + str(self.targetRequestURI.text) + '\r'
 
         # insert the new header immediately after the first line
         newHttpHeaderStr = httpHeaderStrWithNewStatus.replace('\n', '\n' + extraHeaderStr, 1)
@@ -219,7 +230,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
 
         # release the modified message
         message.setResponse(newResHeaderBytes + resBodyBytes)
-        self.debug('Replaced the response with the new headers and the original body', 3)
+        self.debug('Replaced the response with the new headers and the original body', 2)
 
         # end of function - return!
         return
