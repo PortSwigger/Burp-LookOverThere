@@ -14,6 +14,7 @@ Look Over There is a simple bit of code, and at its most simple, you give it a t
 
 The extension is designed to be configurable in the following ways
 
+* enabled / disabled (disabled by default)
 * only inject into HTTP 200 responses (default)
 * only inject into resources within the project's scope (default)
 * trigger and target URIs
