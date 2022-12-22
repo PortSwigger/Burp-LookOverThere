@@ -4,7 +4,9 @@ This is a Burp Suite extension to help Burp know where to look during scanning.
 
 ## What is it and what is it for?
 
-It was created because Single Page Applications (SPAs) often have an API that JavaScript interacts with perfectly fine, but, nothing else can work out what to do with the responses.  For example I recently did some testing against a service that simply returned an ID number, the JS got on with it fine but Burp just saw an integer and unsurprisingly stopped there.  This means that Burp cannot detect if it has successfully managed to inject Cross Site Scripting (XSS) or other similar attacks.  The described JS API problem is only an issue if you don't have the time to manually assess all the endpoints, but modern web applications can be large and that can mean a lot of very manual testing... enter "Look Over There".
+It was created because Single Page Applications (SPAs) often have an API that JavaScript interacts with perfectly fine, but, nothing else can work out what to do with the responses.  For example I recently did some testing against a service that simply returned an ID number, the JS got on with it fine but Burp just saw an integer and unsurprisingly stopped there as it had no context to work with.
+
+This problem means that Burp cannot detect if it has successfully managed to inject Cross Site Scripting (XSS) or other similar attacks.  The described JS API problem is only an issue if you don't have the time to manually assess all the endpoints, but modern web applications can be large and that can mean a lot of very manual testing... enter "Look Over There".
 
 ## Usage
 
