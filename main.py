@@ -149,7 +149,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
         if messageIsRequest:
             self.debug('Message is a REQ', 3)
             if (re.search(str(self.targetRequestURI.text), str(reqURL), re.IGNORECASE) and self.triggersAndTargetsAreGreedy.isSelected())\
-                or (re.search(str(self.targetRequestURI.text + "$"), str(reqURL), re.IGNORECASE) and not self.triggersAndTargetsAreGreedy.isSelected()):
+                or (re.search(r"" + re.escape(str(self.targetRequestURI.text)) + "$", str(reqURL), re.IGNORECASE) and not self.triggersAndTargetsAreGreedy.isSelected()):
                 self.debug('Target resource found: ' + str(reqURL), 2)
                 # deal with potentially annoying referrer headers (that often break things...)
 
@@ -252,7 +252,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
 
             # if the request is to a trigger resource URI then continue
             if (re.search(str(self.triggerRequestURI.text), str(reqURL), re.IGNORECASE) and self.triggersAndTargetsAreGreedy.isSelected())\
-                or (re.search(str(self.triggerRequestURI.text + "$"), str(reqURL), re.IGNORECASE) and not self.triggersAndTargetsAreGreedy.isSelected()):
+                or (re.search(r"" + re.escape(str(self.triggerRequestURI.text)) + "$", str(reqURL), re.IGNORECASE) and not self.triggersAndTargetsAreGreedy.isSelected()):
                 self.debug('Trigger resource found: ' + str(reqURL), 1)
             else:
                 self.debug('Trigger resource NOT found!  Looking for: ' + str(self.triggerRequestURI.text) + ' but it was: ' + str(reqURL), 3)
