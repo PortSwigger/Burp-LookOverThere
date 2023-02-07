@@ -50,7 +50,8 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
         self.stripReferrerHeaders.setToolTipText("By default this strips the referrer headers in redirected requests")
         self.triggersAndTargetsAreGreedy = self.defineCheckBox('Greedy Triggers and Targets', False)
         self.triggersAndTargetsAreGreedy.setToolTipText("Triggers and Targets are discovered by regex, by default they will not match greedily")
-
+        self.bodyIsIDnumber = self.defineCheckBox('Body is the ID number to follow', False)
+        self.bodyIsIDnumber.setToolTipText("Some endpoints respond with an ID number in the body and we need to redirect to it.  In the target field the ID number will replace <IDNUMHERE> including the angle brackets")
         self.permitMethodGET = self.defineCheckBox("Permit triggers with GET HTTP Method", False)
         self.permitMethodGET.setToolTipText("By default don't fiddle with GET requests")
         self.permitMethodPOST = self.defineCheckBox("Permit triggers with POST HTTP Method", True)
@@ -85,6 +86,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
                 .addComponent(self.honourExistingLocationHeaders, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
                 .addComponent(self.stripReferrerHeaders, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
                 .addComponent(self.triggersAndTargetsAreGreedy, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
+                .addComponent(self.bodyIsIDnumber, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
                 .addComponent(self.permitMethodGET, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
                 .addComponent(self.permitMethodPOST, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
                 .addComponent(self.permitMethodPUT, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
@@ -102,6 +104,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
             .addComponent(self.honourExistingLocationHeaders, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
             .addComponent(self.stripReferrerHeaders, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
             .addComponent(self.triggersAndTargetsAreGreedy, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
+            .addComponent(self.bodyIsIDnumber, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
             .addComponent(self.permitMethodGET, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
             .addComponent(self.permitMethodPOST, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
             .addComponent(self.permitMethodPUT, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
@@ -263,6 +266,20 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
             resBodyStr = self._helpers.bytesToString(resBodyBytes)
             self.debug("Res body: " + str(resBodyStr[:40]), 3)
 
+            # set the redirection target here in case we don't manipulate it below
+            redirectURI = self.targetRequestURI.text
+            # if required, collect the ID number from the body
+            if self.bodyIsIDnumber.isSelected():
+                self.debug('Attempting to extract ID number from body', 2)
+                redirectionIDnum = resBodyStr.strip()
+                self.debug('ID number is: "' + redirectionIDnum + '"', 3)
+                if re.search(r'<IDNUMHERE>', self.targetRequestURI.text):
+                    redirectURI = re.sub(r'<IDNUMHERE>', redirectionIDnum, self.targetRequestURI.text)
+                else:
+                    self.debug('[!] Could not find marker in target URI, cannot substitute ID number despite config', 1)
+            else:
+                self.debug('Config does not require collecting ID from body', 2)
+
             # collect the HTTP status code
             currentStatusCode = re.search(r"HTTP\/(?:1.0|1.1|2|3)\s([0-9][0-9][0-9]).+", resHeaderStr).group(1)
             self.debug('Current HTTP status code is: ' + currentStatusCode, 3)
@@ -275,7 +292,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
             self.debug('Set the HTTP status code to a 302 redirect', 3)
 
             # build the additional header string - thi doesn't need the \n as this is added elsewhere, just the \r needed
-            extraHeaderStr = 'Location: ' + str(self.targetRequestURI.text) + '\r'
+            extraHeaderStr = 'Location: ' + str(redirectURI) + '\r'
 
             # insert the new header immediately after the first line
             newHttpHeaderStr = resHeaderStrWithNewStatus.replace('\n', '\n' + extraHeaderStr, 1)
