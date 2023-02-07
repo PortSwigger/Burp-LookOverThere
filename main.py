@@ -51,7 +51,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
         self.triggersAndTargetsAreGreedy = self.defineCheckBox('Greedy Triggers and Targets', False)
         self.triggersAndTargetsAreGreedy.setToolTipText("Triggers and Targets are discovered by regex, by default they will not match greedily")
         self.bodyIsIDnumber = self.defineCheckBox('Body is the ID number to follow', False)
-        self.bodyIsIDnumber.setToolTipText("Some endpoints respond with an ID number in the body and we need to redirect to it.  In the target field the ID number will replace <IDNUMHERE> including the angle brackets")
+        self.bodyIsIDnumber.setToolTipText("Some endpoints respond with an ID number in the body and we need to redirect to it.  In the target field the ID number will replace IDNUMFROMBODYHERE including the angle brackets")
         self.permitMethodGET = self.defineCheckBox("Permit triggers with GET HTTP Method", False)
         self.permitMethodGET.setToolTipText("By default don't fiddle with GET requests")
         self.permitMethodPOST = self.defineCheckBox("Permit triggers with POST HTTP Method", True)
@@ -151,8 +151,19 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
         # we primarily process the responses (and get the bits of the request we need when they are responded to)
         if messageIsRequest:
             self.debug('Message is a REQ', 3)
-            if (re.search(str(self.targetRequestURI.text), str(reqURL), re.IGNORECASE) and self.triggersAndTargetsAreGreedy.isSelected())\
-                or (re.search(r"" + re.escape(str(self.targetRequestURI.text)) + "$", str(reqURL), re.IGNORECASE) and not self.triggersAndTargetsAreGreedy.isSelected()):
+
+            #preparing the regex for next step as it is conditional
+            # setting basic regex in case no conditions match
+            targetRequestURIregex = re.escape(str(self.targetRequestURI.text))
+            if not self.triggersAndTargetsAreGreedy.isSelected():
+                targetRequestURIregex = targetRequestURIregex + "$"
+                self.debug("Updated regex string to: " + targetRequestURIregex, 3)
+            if self.bodyIsIDnumber.isSelected():
+                targetRequestURIregex =   re.sub(re.escape("IDNUMFROMBODYHERE"), ".+", targetRequestURIregex)
+                self.debug("Updated regex string to: " + targetRequestURIregex, 3)
+
+            # check request URI is suitable
+            if re.search(targetRequestURIregex, str(reqURL), re.IGNORECASE):
                 self.debug('Target resource found: ' + str(reqURL), 2)
                 # deal with potentially annoying referrer headers (that often break things...)
 
@@ -190,7 +201,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
                         self.debug('Full request headers:\n' + reqHeaderStr, 3)
 
             else:
-                self.debug('Target resource NOT found!  Looking for: ' + str(self.targetRequestURI.text) + ' but it was: ' + str(reqURL), 3)
+                self.debug('Target resource NOT found!  Looking for: ' + targetRequestURIregex + ' but it was: ' + str(reqURL), 3)
 
         # message is a response
         else:
@@ -273,8 +284,8 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
                 self.debug('Attempting to extract ID number from body', 2)
                 redirectionIDnum = resBodyStr.strip()
                 self.debug('ID number is: "' + redirectionIDnum + '"', 3)
-                if re.search(r'<IDNUMHERE>', self.targetRequestURI.text):
-                    redirectURI = re.sub(r'<IDNUMHERE>', redirectionIDnum, self.targetRequestURI.text)
+                if re.search(r'IDNUMFROMBODYHERE', self.targetRequestURI.text):
+                    redirectURI = re.sub(r'IDNUMFROMBODYHERE', redirectionIDnum, self.targetRequestURI.text)
                 else:
                     self.debug('[!] Could not find marker in target URI, cannot substitute ID number despite config', 1)
             else:
