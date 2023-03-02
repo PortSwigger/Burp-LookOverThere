@@ -1,0 +1,13 @@
+Uuid: 156315ca57c4416b94a212b20399f274
+ExtensionType: 2
+Name: Look Over There
+RepoName: look-over-there
+ScreenVersion: 1.0
+SerialVersion: 3
+MinPlatformVersion: 0
+ProOnly: False
+Author: Felix Ryan
+ShortDescription: Help Burp know where to look when scanning
+EntryPoint: main.py
+BuildCommand: 
+SupportedProducts: Pro, Community

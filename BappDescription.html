@@ -1,0 +1,21 @@
+<p>This is a Burp Suite extension to help Burp know where to look during scanning.</p>
+
+<p>What is it and what is it for?</p>
+
+<p>This extension was created with Single Page Applications (SPAs) in mind, to try and reduce the amount of manual testing needed, especially when the application has an API that interacts with JavaScript</p>
+
+<p>Usage</p>
+
+<p>Look Over There is a simple bit of code, and at its most simple, you give it a trigger URI and a target URI. When the trigger URI is observed the extension inserts an HTTP 302 status code and a Location header to the target URI. This then means that Burp will (if it deems it necessary) follow the HTTP redirection and in doing so, should be able to see any successful attack results.</p>
+
+<p>The extension is designed to be configurable in the following ways</p>
+<ul>
+	<li>enabled / disabled (disabled by default)</li>
+	<li>only inject into HTTP 200 responses (default)</li>
+	<li>only inject into resources within the project's scope</li>
+	<li>trigger and target URIs</li>
+	<li>HTTP POST / GET / PUT / OPTIONS methods (POST only by default)</li>
+	<li>debug level</li>
+</ul>
+
+<p>As a precaution, the extension will only operate against requests made by appropriate Burp Suite tools. It won't do anything if the request is triggered by the Proxy / Spider / Sequencer (or Decoder / Comparer).</p>
