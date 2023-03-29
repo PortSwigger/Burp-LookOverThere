@@ -284,17 +284,21 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
             # still need the body in bytes even though we aren't manipulating it
             resBodyBytes = message.getResponse()[resInfo.getBodyOffset():]
             resBodyStr = self._helpers.bytesToString(resBodyBytes)
-            self.debug("Res body: " + str(resBodyStr[:40]), 3)
+            self.debug("Res body: " + str(resBodyStr[:60]), 3)
 
             # set the redirection target here in case we don't manipulate it below
             redirectURI = self.targetRequestURI.text
             # if required, collect the ID number from the body
             if self.bodyIsIDnumber.isSelected() or self.doRegexForRedirectID.isSelected():
                 self.debug('Attempting to extract ID number from body', 2)
+                # set this so that it doesn't explode if not found and leaves an obvious message in debug
+                redirectionID = 'NotFoundTryConfigAgain'
                 if self.bodyIsIDnumber.isSelected():
                     redirectionID = resBodyStr.strip()
                 if self.doRegexForRedirectID.isSelected():
-                    redirectionID = re.search(self.triggerResponseRegex, resBodyStr).group(1)
+                    redirectionIDsearch = re.search(str(self.triggerResponseRegex.text), resBodyStr)
+                    if redirectionIDsearch != None:
+                        redirectionID = redirectionIDsearch.group(1)
                 self.debug('ID number is: "' + redirectionID + '"', 3)
                 if re.search(r'IDNUMFROMBODYHERE', self.targetRequestURI.text):
                     redirectURI = re.sub(r'IDNUMFROMBODYHERE', redirectionID, self.targetRequestURI.text)
