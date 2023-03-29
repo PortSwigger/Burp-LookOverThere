@@ -67,6 +67,11 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
         self.targetRequestURIGroup = JPanel()
         self.targetRequestURIGroup.add(self.targetRequestURILabel)
         self.targetRequestURIGroup.add(self.targetRequestURI)
+        
+        self.doRegexForRedirectID = self.defineCheckBox('Regex string to extract ID', False)
+        self.doRegexForRedirectID.setToolTipText("Disabled by default, this option allows you to specify a capturing regex to extract the ID")
+        self.triggerResponseRegex = JTextField('"https:\/\/www.exmaple.com\/(.*)"')
+
 
         # build the settings tab
         self.tab = JPanel()
@@ -280,12 +285,15 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
             # set the redirection target here in case we don't manipulate it below
             redirectURI = self.targetRequestURI.text
             # if required, collect the ID number from the body
-            if self.bodyIsIDnumber.isSelected():
+            if self.bodyIsIDnumber.isSelected() or self.doRegexForRedirectID.isSelected():
                 self.debug('Attempting to extract ID number from body', 2)
-                redirectionIDnum = resBodyStr.strip()
-                self.debug('ID number is: "' + redirectionIDnum + '"', 3)
+                if self.bodyIsIDnumber.isSelected():
+                    redirectionID = resBodyStr.strip()
+                if self.doRegexForRedirectID.isSelected():
+                    redirectionID = re.search(self.triggerResponseRegex, resBodyStr).group(1)
+                self.debug('ID number is: "' + redirectionID + '"', 3)
                 if re.search(r'IDNUMFROMBODYHERE', self.targetRequestURI.text):
-                    redirectURI = re.sub(r'IDNUMFROMBODYHERE', redirectionIDnum, self.targetRequestURI.text)
+                    redirectURI = re.sub(r'IDNUMFROMBODYHERE', redirectionID, self.targetRequestURI.text)
                 else:
                     self.debug('[!] Could not find marker in target URI, cannot substitute ID number despite config', 1)
             else:
