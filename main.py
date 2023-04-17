@@ -233,7 +233,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
                     newreqHeaderStr = reqHeaderStr + cookieStr
                     
                     # return this to a byte array
-                    newReqHeaderBytes = array(bytearray*newReqHeaderStr.encode('utf-8')), 'b')
+                    newReqHeaderBytes = array(bytearray(newReqHeaderStr.encode('utf-8')), 'b')
                     # put the data back in original vars for other header manipulation routines / message release
                     reqHeaderStr = newReqHeaderStr
                     reqHeaderBytes = newReqHeaderBytes
