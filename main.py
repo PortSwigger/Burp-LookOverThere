@@ -306,7 +306,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
                 self.debug("Status code is either a 200 or config doesn't care: continuing", 2)
 
             # if the request is to a trigger resource URI then continue
-            if (re.search(str(self.triggerRequestURI.text), str(reqURL), re.IGNORECASE) and self.triggersAndTargetsAreGreedy.isSelected())\
+            if (re.search(str(self.triggerRequestURI.text), str(reqURL).encode("ascii", errors="ignore").decode(), re.IGNORECASE) and self.triggersAndTargetsAreGreedy.isSelected())\
                 or (re.search(r"" + re.escape(str(self.triggerRequestURI.text)) + "$", str(reqURL), re.IGNORECASE) and not self.triggersAndTargetsAreGreedy.isSelected()):
                 self.debug('Trigger resource found: ' + str(reqURL), 1)
             else:
