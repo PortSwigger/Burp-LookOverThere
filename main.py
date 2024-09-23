@@ -50,8 +50,20 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
         self.stripReferrerHeaders.setToolTipText("By default this strips the referrer headers in redirected requests")
         self.triggersAndTargetsAreGreedy = self.defineCheckBox('Greedy Triggers and Targets', False)
         self.triggersAndTargetsAreGreedy.setToolTipText("Triggers and Targets are discovered by regex, by default they will not match greedily")
+
         self.bodyIsIDnumber = self.defineCheckBox('Body is the ID number to follow', False)
         self.bodyIsIDnumber.setToolTipText("Some endpoints respond with an ID number in the body and we need to redirect to it.  In the target field the ID number will replace IDNUMFROMBODYHERE including the angle brackets")
+
+        self.doRegexForRedirectID = self.defineCheckBox('Regex string to extract ID', False)
+        self.doRegexForRedirectID.setToolTipText("Disabled by default, this option allows you to specify a capturing regex to extract the ID")
+        self.triggerResponseRegex = JTextField('"https:\/\/www.exmaple.com\/(.*)"')
+        self.triggerResponseRegexLabel = JLabel('Regex to capture ID')
+
+        self.cookieReplacementInTargetReq = self.defineCheckBox('Replace or inject cookies with injected values', False)
+        self.cookieReplacementInTargetReq.setToolTipText("False by default, this allows the plugin to replace or inject discovered cookies cookies with a given string")
+        self.cookieToInject = JTextField('ExampleCookie=ExampleValue')
+        self.cookieToInjectLabel = JLabel('Cookie to Inject')
+
         self.permitMethodGET = self.defineCheckBox("Permit triggers with GET HTTP Method", False)
         self.permitMethodGET.setToolTipText("By default don't fiddle with GET requests")
         self.permitMethodPOST = self.defineCheckBox("Permit triggers with POST HTTP Method", True)
@@ -67,6 +79,8 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
         self.targetRequestURIGroup = JPanel()
         self.targetRequestURIGroup.add(self.targetRequestURILabel)
         self.targetRequestURIGroup.add(self.targetRequestURI)
+        
+
 
         # build the settings tab
         self.tab = JPanel()
@@ -87,6 +101,10 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
                 .addComponent(self.stripReferrerHeaders, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
                 .addComponent(self.triggersAndTargetsAreGreedy, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
                 .addComponent(self.bodyIsIDnumber, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
+                .addComponent(self.doRegexForRedirectID, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
+                .addComponent(self.triggerResponseRegex, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
+                .addComponent(self.cookieReplacementInTargetReq, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
+                .addComponent(self.cookieToInject, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
                 .addComponent(self.permitMethodGET, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
                 .addComponent(self.permitMethodPOST, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
                 .addComponent(self.permitMethodPUT, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
@@ -105,6 +123,10 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
             .addComponent(self.stripReferrerHeaders, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
             .addComponent(self.triggersAndTargetsAreGreedy, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
             .addComponent(self.bodyIsIDnumber, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
+            .addComponent(self.doRegexForRedirectID, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
+            .addComponent(self.triggerResponseRegex, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
+            .addComponent(self.cookieReplacementInTargetReq, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
+            .addComponent(self.cookieToInject, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
             .addComponent(self.permitMethodGET, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
             .addComponent(self.permitMethodPOST, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
             .addComponent(self.permitMethodPUT, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE, GroupLayout.PREFERRED_SIZE)
@@ -162,44 +184,63 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
                 targetRequestURIregex =   re.sub(re.escape("IDNUMFROMBODYHERE"), ".+", targetRequestURIregex)
                 self.debug("Updated regex string to: " + targetRequestURIregex, 3)
 
-            # check request URI is suitable
+            # check request URI is target URI
             if re.search(targetRequestURIregex, str(reqURL), re.IGNORECASE):
                 self.debug('Target resource found: ' + str(reqURL), 2)
-                # deal with potentially annoying referrer headers (that often break things...)
+                # deal with potentially annoying parts of the resulting HTTP request that prevent the system from working correctly...
+
+                # prep the headers and body
+                reqInfo = self._helpers.analyzeRequest(message.getRequest())
+                reqHeaderBytes = message.getRequest()[:reqInfo.getBodyOffset()]
+                reqHeaderStr = self._helpers.bytesToString(reqHeaderBytes)
+                # still need the body in bytes even though we aren't manipulating it
+                reqBodyBytes = message.getRequest()[reqInfo.getBodyOffset():]                
+                self.debug('Full headers from the original request are:\n{}'.format(reqHeaderStr.strip()), 3)
 
                 # if config permits, continue
                 if self.stripReferrerHeaders.isSelected():
                     self.debug("Referrer stripping enabled: ", 2)
 
-                    # prep the headers
-                    reqInfo = self._helpers.analyzeRequest(message.getRequest())
-                    reqHeaderBytes = message.getRequest()[:reqInfo.getBodyOffset()]
-                    reqHeaderStr = self._helpers.bytesToString(reqHeaderBytes)
-
                     # if referer header found when searhed for
-                    if re.search(r"\nReferer:\s.+", reqHeaderStr):
-                        currentReferrerHeader = re.search(r"\n(Referer:\s.+)", reqHeaderStr).group(1)
+                    if re.search(r"\nReferer:\s.+", reqHeaderStr, re.IGNORECASE):
+                        currentReferrerHeader = re.search(r"\n(Referer:\s.+)", reqHeaderStr, re.IGNORECASE).group(1)
                         self.debug('Current referrer header is: ' + str(currentReferrerHeader), 3)
                         # remove referer header
-                        newReqHeaderStr = re.sub(r"\nReferer:\s.+", '', reqHeaderStr)
+                        newReqHeaderStr = re.sub(r"\nReferer:\s.+", '', reqHeaderStr, re.IGNORECASE)
                         # return this to being a byte array
                         newReqHeaderBytes = array(bytearray(newReqHeaderStr.encode('utf-8')), 'b')
-
-                        # good old-fashioned debug output
-                        self.debug('Full headers from the original request are:\n{}'.format(reqHeaderStr.strip()), 3)
-                        self.debug('Full headers after referer removed are:\n{}'.format(newReqHeaderStr.strip()), 3)
-
-                        # still need the body in bytes even though we aren't manipulating it
-                        reqBodyBytes = message.getRequest()[reqInfo.getBodyOffset():]
-
-                        # release the modified message
-                        message.setRequest(newReqHeaderBytes + reqBodyBytes)
+                        # put the data back in original vars for other header manipulation routines / message release
+                        reqHeaderStr = newReqHeaderStr
+                        reqHeaderBytes = newReqHeaderBytes
 
                     else:
                         # otherwise only do debug output
                         self.debug('No referrer header detected', 2)
-                        self.debug('Full request headers:\n' + reqHeaderStr, 3)
+   
+                if self.cookieReplacementInTargetReq.isSelected():
+                    self.debug("Cookie replacement or injection enabled: ", 2)
+                    
+                    #strip any pre-existing cookies
+                    if re.search(r"\nCookie:\s.+", reqHeaderStr, re.IGNORECASE):
+                        currentCookiesSearch = re.search(r"\n(Cookie:\s.+)", reqHeaderStr, re.IGNORECASE).group(1)
+                        self.debug('Current cookies are: ' + str(currentCookies), 3)
+                        # replace current cookies with injected ones
+                        newReqHeaderStr = re.sub(r"\nCookie:\s.+", '', reqHeaderStr, re.IGNORECASE)
 
+                    # there should now be no pre-existing cookie, se we need to inject one
+                    cookieStr = 'Cookie: ' + self.cookieToInject + '\r\n\r\n'
+                    reqHeaderStr = reqHeaderStr.strip()
+                    newreqHeaderStr = reqHeaderStr + cookieStr
+                    
+                    # return this to a byte array
+                    newReqHeaderBytes = array(bytearray(newReqHeaderStr.encode('utf-8')), 'b')
+                    # put the data back in original vars for other header manipulation routines / message release
+                    reqHeaderStr = newReqHeaderStr
+                    reqHeaderBytes = newReqHeaderBytes
+                        
+                        
+                # release the message modified or otherwise
+                message.setRequest(reqHeaderBytes + reqBodyBytes)
             else:
                 self.debug('Target resource NOT found!  Looking for: ' + targetRequestURIregex + ' but it was: ' + str(reqURL), 3)
 
@@ -265,7 +306,7 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
                 self.debug("Status code is either a 200 or config doesn't care: continuing", 2)
 
             # if the request is to a trigger resource URI then continue
-            if (re.search(str(self.triggerRequestURI.text), str(reqURL), re.IGNORECASE) and self.triggersAndTargetsAreGreedy.isSelected())\
+            if (re.search(str(self.triggerRequestURI.text), str(reqURL).encode("ascii", errors="ignore").decode(), re.IGNORECASE) and self.triggersAndTargetsAreGreedy.isSelected())\
                 or (re.search(r"" + re.escape(str(self.triggerRequestURI.text)) + "$", str(reqURL), re.IGNORECASE) and not self.triggersAndTargetsAreGreedy.isSelected()):
                 self.debug('Trigger resource found: ' + str(reqURL), 1)
             else:
@@ -275,17 +316,24 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
             # still need the body in bytes even though we aren't manipulating it
             resBodyBytes = message.getResponse()[resInfo.getBodyOffset():]
             resBodyStr = self._helpers.bytesToString(resBodyBytes)
-            self.debug("Res body: " + str(resBodyStr[:40]), 3)
+            self.debug("Res body: " + str(resBodyStr[:60]), 3)
 
             # set the redirection target here in case we don't manipulate it below
             redirectURI = self.targetRequestURI.text
             # if required, collect the ID number from the body
-            if self.bodyIsIDnumber.isSelected():
+            if self.bodyIsIDnumber.isSelected() or self.doRegexForRedirectID.isSelected():
                 self.debug('Attempting to extract ID number from body', 2)
-                redirectionIDnum = resBodyStr.strip()
-                self.debug('ID number is: "' + redirectionIDnum + '"', 3)
+                # set this so that it doesn't explode if not found and leaves an obvious message in debug
+                redirectionID = 'NotFoundTryConfigAgain'
+                if self.bodyIsIDnumber.isSelected():
+                    redirectionID = resBodyStr.strip()
+                if self.doRegexForRedirectID.isSelected():
+                    redirectionIDsearch = re.search(str(self.triggerResponseRegex.text), resBodyStr)
+                    if redirectionIDsearch != None:
+                        redirectionID = redirectionIDsearch.group(1)
+                self.debug('ID number is: "' + redirectionID + '"', 3)
                 if re.search(r'IDNUMFROMBODYHERE', self.targetRequestURI.text):
-                    redirectURI = re.sub(r'IDNUMFROMBODYHERE', redirectionIDnum, self.targetRequestURI.text)
+                    redirectURI = re.sub(r'IDNUMFROMBODYHERE', redirectionID, self.targetRequestURI.text)
                 else:
                     self.debug('[!] Could not find marker in target URI, cannot substitute ID number despite config', 1)
             else:
@@ -325,3 +373,4 @@ class BurpExtender(IBurpExtender, IHttpListener, ITab):
 
     def extensionUnloaded(self):
         self.debug('Unloading extension...')
+#
